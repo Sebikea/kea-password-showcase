@@ -3,6 +3,8 @@ from nicegui import ui
 import re
 import header
 import os
+import hashlib
+import bcrypt
 from pathlib import Path
 app = FastAPI()
 
@@ -27,12 +29,12 @@ def main_page():
                 on_change=lambda e: strength_label.set_text("Password strength: " + callback_for_password_input(e)),
                 validation={'Input too long': lambda value: len(value) < 30})
             strength_label = ui.label("Password strength:")
-            ui.button("Try to break my password!",on_click=break_password(password_input._text))
+            start_button = ui.button("Try to break my password!",on_click=lambda: (break_password(password_input.value, radio1.value)))
 
         #Middle content is here
         middle_card = ui.card().classes('w-max absolute left-0 right-0 flex mx-auto')
         with middle_card:
-            ui.label("Middle content")
+            status = ui.label("Enter password to begin").classes('font-bold')
         right_card = ui.card().classes('w-max absolute right-10 mx-auto')
 
         #Right card for controls are here
@@ -51,10 +53,35 @@ def main_page():
             ui.image(path_to_logo)
             ui.label("Credit: Dany (daka@kea.dk)")
             ui.label("Sebastian (sebi@kea.dk)")
-    
+
+    def break_password(password, hash):
+        status.set_text("Processing...")
+        status.classes('font-bold')
+        start_button.disable()
+        with middle_card:
+            ui.separator()
+            if "bcrypt" not in radio1.value: 
+                ui.label("Your hash digest in {0} is {1}".format(hash, get_hash_value(password, hash)))
+            else:
+                password_hash, salt = get_hash_value(password, hash)
+                password_hash = password_hash.decode()
+                salt = salt.decode()
+                ui.label("I have generated a random salt for you: {0}".format(salt))
+                ui.label("Your hash digest in {0} is {1}:".format(hash, password_hash))
         
-def break_password(password):
-    print(password)
+def get_hash_value(password, hash):
+    if "MD5" in hash:
+        hash_digest = hashlib.md5(password.encode()).hexdigest()
+        return hash_digest
+    elif "SHA2" in hash:
+        hash_digest = hashlib.sha256(password.encode()).hexdigest()
+        return hash_digest
+    elif "bcrypt" in hash:
+        salt = bcrypt.gensalt()
+        password_hash = bcrypt.hashpw(password.encode(), salt)
+        return (password_hash, salt)
+    
+    
 
 def calc_password_strength(password):
     score = 0
