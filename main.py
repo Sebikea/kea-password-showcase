@@ -19,7 +19,7 @@ app = FastAPI()
 line_output_counter = 0
 line_queue = queue.Queue()
 
-
+MAXIMUM_CRACK_TIME = 120
 
 path_to_wordlist = Path(os.getcwd() + "/wordlists/rockyou.txt")
 path_to_logo = Path(os.getcwd() + "/assets/kea-logo-dk-web.jpg")
@@ -66,6 +66,7 @@ def main_page():
         with middle_card:
             status = ui.label("Enter password to begin").classes('font-bold')
             output_container = ui.column()
+            advice_container = ui.column()
         right_card = ui.card().classes('w-max absolute right-2 mx-auto')
 
         #Right card for controls are here
@@ -96,6 +97,7 @@ def main_page():
 
     def break_password(password, hash, program, method):
         output_container.clear()
+        advice_container.clear()
         global line_output_counter
         line_output_counter = 0
         status.set_text("Processing...")
@@ -124,6 +126,7 @@ def main_page():
 
     def start_cracking(command, password_hash, password):
         start_time = time.time()
+        cracked = False
         with middle_card:
             spinner = ui.spinner(size='lg').classes('fixed-center')
 
@@ -132,6 +135,7 @@ def main_page():
         with left_card:
             stop_button = ui.button("Stop cracking",on_click=lambda: (kill_thread(p)))
         while True:
+            
             #Truncates the output if we dont want the full debug
             if "yes" in radio4.value:
                 t = p.stdout.readline()
@@ -147,14 +151,27 @@ def main_page():
                 if "hashcat" in radio2.value:
                     p.stdin.write("s")
                 time.sleep(1)
+            #Polls the subprocess if it still exists or not. Handles cleanup if its done
             if p.poll() != None:
+                time_to_crack = int(time.time() - start_time)
                 status.set_text("Done!")
                 spinner.delete()
                 start_button.enable()
                 stop_button.delete()
-                time_to_crack = int(time.time() - start_time)
                 line_queue.put(f"It took {time_to_crack} seconds to crack your password.")
+                cracked = True
                 history.insert_crack_result(password_hash, password, radio2.value + " - " + radio3.value, time_to_crack)
+                break
+            #Maximum cracktime checker, defined by the constant. Kills the subprocess 
+            timeout = int(time.time() - start_time)
+            print(timeout)
+            if timeout > MAXIMUM_CRACK_TIME:
+                kill_thread(p)
+                status.set_text("Failed...")
+                spinner.delete()
+                start_button.enable()
+                stop_button.delete()
+                line_queue.put(f"Sorry, I couldn't crack your password within timelimit, which is currently {MAXIMUM_CRACK_TIME} seconds.")
                 break
 
         #If there's anything remaining in the pipe after the process ends, print it out
@@ -164,6 +181,19 @@ def main_page():
                     line_queue.put("Your password got cracked! - " + line)
             else:
                 line_queue.put(line)
+        if cracked and "no" in radio4.value:
+            with advice_container:
+                ui.separator()
+                ui.label("Follow these practices to increase your password security:").classes('font-bold')
+                with ui.column().classes('w-full border'):
+                    with ui.card().classes('justify-left').style('background-color: #2E8B57'):
+                        ui.label("Always use long passwords, with a mix of special characters, upper and lowercase letters and numbers.").classes('font-bold')
+                    with ui.card().classes('justify-center').style('background-color: #228B22'):
+                        ui.label("Never use the same password for multiple accounts.").classes('font-bold')
+                    with ui.card().classes('justify-center').style('background-color: #008000'):
+                        ui.label("Consider using a password manager, to help you generate long and random passwords.").classes('font-bold')
+                    with ui.card().classes('justify-center').style('background-color: #006400'):  
+                        ui.link("Have a look at the password chart for more information", "/password-chart").classes('font-bold text-blue')
 
         
 
