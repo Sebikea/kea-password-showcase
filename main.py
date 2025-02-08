@@ -7,29 +7,43 @@ import bcrypt
 import subprocess
 import threading
 import queue
+import time
+import signal
 from password_chart import page_layout
 from password_helpers import *
 from pathlib import Path
 app = FastAPI()
 
-
+line_output_counter = 0
 line_queue = queue.Queue()
+
 
 
 path_to_wordlist = Path(os.getcwd() + "/wordlists/rockyou.txt")
 path_to_logo = Path(os.getcwd() + "/assets/kea-logo-dk-web.jpg")
 path_to_johnpot = Path(os.getcwd() + "/.pot")
+path_to_johnrec = Path("/home/kali/.john/john.rec")
 
 
 @ui.page('/')
 def main_page():
 
     def update_ui():
+
         # Check the queue and update the UI if new lines are available.
         while not line_queue.empty():
-            line = line_queue.get()
+            global line_output_counter
+            line_output_counter+=1
+
+            #Clear the screen if we have too many output lines
+            if line_output_counter >= 100:
+                output_container.clear()
+                line_output_counter = 0
+          
             # Append each line as a new label inside the container.
+            line = line_queue.get()
             ui.label(line).move(output_container)
+
     header.page_layout()
     ui.page_title("KEA Password Showcase")
     #Divide the main content into 3 sections, left section for password stuff, right for controls and middle for information
@@ -80,6 +94,8 @@ def main_page():
 
     def break_password(password, hash, program, method):
         output_container.clear()
+        global line_output_counter
+        line_output_counter = 0
         status.set_text("Processing...")
         status.classes('font-bold')
         start_button.disable()
@@ -98,28 +114,60 @@ def main_page():
                 ui.label("Your hash digest in {0} is {1}:".format(hash, password_hash))
 
         command = generate_command(password, hash, password_hash, program, method)
-            
+
+        #Spawn separate thread for cracking
         threading.Thread(target=start_cracking, args=(command, password_hash), daemon=True).start()
-        #start_cracking(command, password_hash)
+
 
     def start_cracking(command, password_hash):
         with middle_card:
             spinner = ui.spinner(size='lg').classes('fixed-center')
-        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True) as p:
-            for line in p.stdout:
-                if "no" in radio4.value:
-                    if password_hash in line or "(?)" in line:
-                        line_queue.put("Your password got cracked! " + line)
-                        break
-                else:
-                    line_queue.put(line)
-            for line in p.stderr:
-                if "yes" in radio4.value:
-                    line_queue.put(line)
-            spinner.delete()
-        status.set_text("Done!")
-        start_button.enable()
+
+        #Start subprocess with cracking command, we can send signals for status and add it to our queue. The queue will get empited by the timer every .5 seconds
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
+        with left_card:
+            stop_button = ui.button("Stop cracking",on_click=lambda: (kill_thread(p)))
+        while True:
+            #Truncates the output if we dont want the full debug
+            if "yes" in radio4.value:
+                t = p.stdout.readline()
+                line_queue.put(t)
+            #Only prints the line with succesful crack
+            else:
+                t = p.stdout.readline()
+                if password_hash+":" in t or "(?)" in t:
+                    line_queue.put("Your password got cracked! - " + t)
+            if p.poll() == None:
+                if "john" in radio2.value: 
+                    p.send_signal(signal.SIGUSR1)
+                if "hashcat" in radio2.value:
+                    p.stdin.write("s")
+                time.sleep(1)
+            if p.poll() != None:
+                status.set_text("Done!")
+                spinner.delete()
+                start_button.enable()
+                stop_button.delete()
+
+                break
+
+        #If there's anything remaining in the pipe after the process ends, print it out
+        for line in p.stdout:
+            if "no" in radio4.value:
+                if password_hash+":" in line or "(?)" in line:
+                    line_queue.put("Your password got cracked! - " + line)
+            else:
+                line_queue.put(line)
+            print(line)
+
         
+
+
+
+def kill_thread(p):
+    p.send_signal(signal.SIGKILL)
+    line_queue.put("Process stopped prematurely")
+       
         
 def get_hash_value(password, hash):
     if "MD5" in hash:

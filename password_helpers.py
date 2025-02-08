@@ -1,7 +1,7 @@
 import re
 import shlex
 import subprocess
-from main import path_to_wordlist, path_to_johnpot
+from main import path_to_wordlist, path_to_johnpot, path_to_johnrec
 
 def calc_password_strength(password):
     score = 0
@@ -53,7 +53,7 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     for char in password:
                         mask += pattern
                     print(mask)
-                    command = "stdbuf -oL hashcat -a 3 -m 0 {0} {1} --potfile-path /dev/null".format(hash_digest, mask)
+                    command = "hashcat -a 3 -m 0 {0} {1} --potfile-path /dev/null".format(hash_digest, mask)
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
@@ -100,6 +100,10 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
             delete_command = "rm {0}".format(path_to_johnpot)
             shlex_command = shlex.split(delete_command)
             subprocess.run(shlex_command)
+        if path_to_johnrec.exists():
+            delete_command = "rm {0}".format(path_to_johnrec)
+            shlex_command = shlex.split(delete_command)
+            subprocess.run(shlex_command)
         with open("hash.txt", "w") as f:
                 f.write(hash_digest)
         if "MD5" in hash_algorithm:
@@ -110,6 +114,32 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     return shlex_command
                 case "brute-force":
                     command = "john hash.txt --format=Raw-MD5 --incremental --min-length={0} --pot={1}".format(len(password), path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
+                case "Rules (best64)":
+                    #To be implemented
+                    pass
+        if "SHA2" in hash_algorithm:
+            match method:
+                case "dictionary":
+                    command = "john hash.txt --format=Raw-SHA256 --wordlist={0} --pot={1}".format(path_to_wordlist, path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
+                case "brute-force":
+                    command = "john hash.txt --format=Raw-SHA256 --incremental --min-length={0} --pot={1}".format(len(password), path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
+                case "Rules (best64)":
+                    #To be implemented
+                    pass
+        if "bcrypt" in hash_algorithm:
+            match method:
+                case "dictionary":
+                    command = "john hash.txt --format=bcrypt --wordlist={0} --pot={1}".format(path_to_wordlist, path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
+                case "brute-force":
+                    command = "john hash.txt --format=bcrypt --incremental --min-length={0} --pot={1}".format(len(password), path_to_johnpot)
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
