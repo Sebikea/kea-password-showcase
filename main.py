@@ -9,7 +9,9 @@ import threading
 import queue
 import time
 import signal
+import history
 from password_chart import page_layout
+
 from password_helpers import *
 from pathlib import Path
 app = FastAPI()
@@ -64,7 +66,7 @@ def main_page():
         with middle_card:
             status = ui.label("Enter password to begin").classes('font-bold')
             output_container = ui.column()
-        right_card = ui.card().classes('w-max absolute right-10 mx-auto')
+        right_card = ui.card().classes('w-max absolute right-2 mx-auto')
 
         #Right card for controls are here
         with right_card:
@@ -79,13 +81,13 @@ def main_page():
 
 
         #External resources
-        with ui.row().classes('w-1/6 absolute left-2 bottom-2 border-2'):   
+        with ui.row().classes('w-1/6 fixed left-2 bottom-2 border-2'):   
             ui.label("Useful resources about passwords").classes('font-bold')
             ui.link("Bitwarden best practices for passwords", "https://bitwarden.com/password-strength/#Password-Strength-Testing-Tool")
             ui.link("Test your e-mail against known breaches", "https://haveibeenpwned.com")
 
         #KEA logo and credits
-        with ui.row().classes('w-1/6 absolute right-2 bottom-2 border-2'):
+        with ui.row().classes('w-1/6 fixed right-2 bottom-2 border-2'):
             ui.image(path_to_logo)
             ui.label("Credit: Dany (daka@kea.dk)")
             ui.label("Sebastian (sebi@kea.dk)")
@@ -99,6 +101,7 @@ def main_page():
         status.set_text("Processing...")
         status.classes('font-bold')
         start_button.disable()
+
         
         
         with output_container:
@@ -116,10 +119,11 @@ def main_page():
         command = generate_command(password, hash, password_hash, program, method)
 
         #Spawn separate thread for cracking
-        threading.Thread(target=start_cracking, args=(command, password_hash), daemon=True).start()
+        threading.Thread(target=start_cracking, args=(command, password_hash, password), daemon=True).start()
 
 
-    def start_cracking(command, password_hash):
+    def start_cracking(command, password_hash, password):
+        start_time = time.time()
         with middle_card:
             spinner = ui.spinner(size='lg').classes('fixed-center')
 
@@ -148,7 +152,9 @@ def main_page():
                 spinner.delete()
                 start_button.enable()
                 stop_button.delete()
-
+                time_to_crack = int(time.time() - start_time)
+                line_queue.put(f"It took {time_to_crack} seconds to crack your password.")
+                history.insert_crack_result(password_hash, password, radio2.value + " - " + radio3.value, time_to_crack)
                 break
 
         #If there's anything remaining in the pipe after the process ends, print it out
@@ -158,7 +164,6 @@ def main_page():
                     line_queue.put("Your password got cracked! - " + line)
             else:
                 line_queue.put(line)
-            print(line)
 
         
 
