@@ -25,6 +25,7 @@ path_to_wordlist = Path(os.getcwd() + "/wordlists/rockyou.txt")
 path_to_logo = Path(os.getcwd() + "/assets/kea-logo-dk-web.jpg")
 path_to_johnpot = Path(os.getcwd() + "/.pot")
 path_to_johnrec = Path("/home/kali/.john/john.rec")
+path_to_best64hc = Path(os.getcwd() + "/wordlists/hc64.rule")
 
 
 @ui.page('/')
@@ -131,69 +132,80 @@ def main_page():
             spinner = ui.spinner(size='lg').classes('fixed-center')
 
         #Start subprocess with cracking command, we can send signals for status and add it to our queue. The queue will get empited by the timer every .5 seconds
-        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True, errors="backslashreplace")
         with left_card:
             stop_button = ui.button("Stop cracking",on_click=lambda: (kill_thread(p)))
-        while True:
-            
-            #Truncates the output if we dont want the full debug
-            if "yes" in radio4.value:
-                t = p.stdout.readline()
-                line_queue.put(t)
-            #Only prints the line with succesful crack
-            else:
-                t = p.stdout.readline()
-                if password_hash+":" in t or "(?)" in t:
-                    line_queue.put("Your password got cracked! - " + t)
-            if p.poll() == None:
-                if "john" in radio2.value: 
-                    p.send_signal(signal.SIGUSR1)
-                if "hashcat" in radio2.value:
-                    p.stdin.write("s")
-                time.sleep(1)
-            #Polls the subprocess if it still exists or not. Handles cleanup if its done
-            if p.poll() != None:
-                time_to_crack = int(time.time() - start_time)
-                status.set_text("Done!")
-                spinner.delete()
-                start_button.enable()
-                stop_button.delete()
-                line_queue.put(f"It took {time_to_crack} seconds to crack your password.")
-                cracked = True
-                history.insert_crack_result(password_hash, password, radio2.value + " - " + radio3.value, time_to_crack)
-                break
-            #Maximum cracktime checker, defined by the constant. Kills the subprocess 
-            timeout = int(time.time() - start_time)
-            print(timeout)
-            if timeout > MAXIMUM_CRACK_TIME:
-                kill_thread(p)
-                status.set_text("Failed...")
-                spinner.delete()
-                start_button.enable()
-                stop_button.delete()
-                line_queue.put(f"Sorry, I couldn't crack your password within timelimit, which is currently {MAXIMUM_CRACK_TIME} seconds.")
-                break
+        try:
+            while True:
+                    #Truncates the output if we dont want the full debug
+                    t = p.stdout.readline()
+                    if password_hash+":" in t or "(?)" in t:
+                        line_queue.put("Your password got cracked! - " + t)
+                        cracked = True
+                    if "yes" in radio4.value:
+                        line_queue.put(t)
 
-        #If there's anything remaining in the pipe after the process ends, print it out
-        for line in p.stdout:
-            if "no" in radio4.value:
+                    if p.poll() == None:
+                        if "john" in radio2.value: 
+                            p.send_signal(signal.SIGUSR1)
+                        if "hashcat" in radio2.value:
+                            p.stdin.write("s")
+                        time.sleep(1)
+                    #Polls the subprocess if it still exists or not. Handles cleanup if its done
+                    if p.poll() != None:
+                        status.set_text("Done!")
+                        spinner.delete()
+                        start_button.enable()
+                        stop_button.delete()
+                        break
+                    #Maximum cracktime checker, defined by the constant. Kills the subprocess 
+                    timeout = int(time.time() - start_time)
+                    print(timeout)
+                    if timeout > MAXIMUM_CRACK_TIME:
+                        kill_thread(p)
+                        status.set_text("Failed...")
+                        spinner.delete()
+                        start_button.enable()
+                        stop_button.delete()
+                        line_queue.put(f"Sorry, I couldn't crack your password within timelimit, which is currently {MAXIMUM_CRACK_TIME} seconds.")
+                        break
+
+            #If there's anything remaining in the pipe after the process ends, print it out
+            for line in p.stdout:
+                line = line.encode('utf-8')
+                line = line.decode('utf-8')
                 if password_hash+":" in line or "(?)" in line:
+                    cracked = True
                     line_queue.put("Your password got cracked! - " + line)
-            else:
-                line_queue.put(line)
-        if cracked and "no" in radio4.value:
+                if "yes" in radio4.value:
+                    line_queue.put(line)
+            if cracked:
+                time_to_crack = int(time.time() - start_time)
+                line_queue.put(f"It took {time_to_crack} seconds to crack your password.")
+                history.insert_crack_result(password_hash, password, radio2.value + " - " + radio3.value, time_to_crack)
+                if "no" in radio4.value:
+                    with advice_container:
+                        ui.separator()
+                        ui.label("Follow these practices to increase your password security:").classes('font-bold')
+                        with ui.column().classes('w-full border'):
+                            with ui.card().classes('justify-left').style('background-color: #2E8B57'):
+                                ui.label("Always use long passwords, with a mix of special characters, upper and lowercase letters and numbers.").classes('font-bold')
+                            with ui.card().classes('justify-center').style('background-color: #228B22'):
+                                ui.label("Never use the same password for multiple accounts.").classes('font-bold')
+                            with ui.card().classes('justify-center').style('background-color: #008000'):
+                                ui.label("Consider using a password manager, to help you generate long and random passwords.").classes('font-bold')
+                            with ui.card().classes('justify-center').style('background-color: #006400'):  
+                                ui.link("Have a look at the password chart for more information", "/password-chart").classes('font-bold text-blue')
+            elif not cracked and "no" in radio4.value:
+                with advice_container:
+                        ui.separator()
+                        ui.label("I couldn't crack your password with the current rules or wordlist.").classes('font-bold')
+        except UnicodeDecodeError as e:
+            print(e)
             with advice_container:
                 ui.separator()
-                ui.label("Follow these practices to increase your password security:").classes('font-bold')
-                with ui.column().classes('w-full border'):
-                    with ui.card().classes('justify-left').style('background-color: #2E8B57'):
-                        ui.label("Always use long passwords, with a mix of special characters, upper and lowercase letters and numbers.").classes('font-bold')
-                    with ui.card().classes('justify-center').style('background-color: #228B22'):
-                        ui.label("Never use the same password for multiple accounts.").classes('font-bold')
-                    with ui.card().classes('justify-center').style('background-color: #008000'):
-                        ui.label("Consider using a password manager, to help you generate long and random passwords.").classes('font-bold')
-                    with ui.card().classes('justify-center').style('background-color: #006400'):  
-                        ui.link("Have a look at the password chart for more information", "/password-chart").classes('font-bold text-blue')
+                ui.label("I couldn't crack your password with the current rules or wordlist.").classes('font-bold')
+                    
 
         
 

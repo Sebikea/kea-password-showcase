@@ -1,7 +1,7 @@
 import re
 import shlex
 import subprocess
-from main import path_to_wordlist, path_to_johnpot, path_to_johnrec
+from main import path_to_wordlist, path_to_johnpot, path_to_johnrec, path_to_best64hc
 
 def calc_password_strength(password):
     score = 0
@@ -57,8 +57,9 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
-                    #To be implemented
-                    pass
+                    command = "stdbuf -oL hashcat -a 0 -m 0 {0} {1} --potfile-path /dev/null -r {2}".format(hash_digest, path_to_wordlist, path_to_best64hc)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
         if "SHA2" in hash_algorithm:
             match method:
                 case "dictionary":
@@ -75,8 +76,9 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
-                    #To be implemented
-                    pass
+                    command = "stdbuf -oL hashcat -a 0 -m 1400 {0} {1} --potfile-path /dev/null -r {2}".format(hash_digest, path_to_wordlist, path_to_best64hc)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
         if "bcrypt" in hash_algorithm:
             match method:
                 case "dictionary":
@@ -93,8 +95,9 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
-                    #To be implemented
-                    pass
+                    command = "stdbuf -oL hashcat -a 0 -m 3200 {0} {1} --potfile-path /dev/null -r {2}".format(hash_digest, path_to_wordlist, path_to_best64hc)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
     if "john" in prog:
         if path_to_johnpot.exists():
             delete_command = "rm {0}".format(path_to_johnpot)
@@ -117,8 +120,9 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
-                    #To be implemented
-                    pass
+                    command = "john hash.txt --format=Raw-MD5 --wordlist={0} --pot={1} --rules=best64".format(path_to_wordlist, path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
         if "SHA2" in hash_algorithm:
             match method:
                 case "dictionary":
@@ -130,8 +134,9 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
-                    #To be implemented
-                    pass
+                    command = "john hash.txt --format=Raw-SHA256 --wordlist={0} --pot={1} --rules=best64".format(path_to_wordlist, path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
         if "bcrypt" in hash_algorithm:
             match method:
                 case "dictionary":
@@ -143,5 +148,6 @@ def generate_command(password, hash_algorithm, hash_digest, prog, method):
                     shlex_command = shlex.split(command)
                     return shlex_command
                 case "Rules (best64)":
-                    #To be implemented
-                    pass
+                    command = "john hash.txt --format=bcrypt --wordlist={0} --pot={1} --rules=best64".format(path_to_wordlist, path_to_johnpot)
+                    shlex_command = shlex.split(command)
+                    return shlex_command
