@@ -1,3 +1,8 @@
+# **Purpose**
+
+## The purpose of this app is to demonstrate some of the differences in security by increasing password length, and choosing better suited hashing algorithms for password storage
+## The speed of cracking will largely depend on the resources of the system running the app
+
 # **Installation**
 
 1. Clone the project and cd into folder
